@@ -16,9 +16,9 @@ $allMachinesUnfiltered = [];
 
 if ($db !== null) {
     try {
-        $allMachinesUnfiltered = get_public_vending_machines($db);
+        $allMachinesUnfiltered = get_public_vending_machines($db, '', '', false);
         $publicMachines = ($searchQuery !== '' || $selectedCategory !== '')
-            ? get_public_vending_machines($db, $searchQuery, $selectedCategory)
+            ? get_public_vending_machines($db, $searchQuery, $selectedCategory, false)
             : $allMachinesUnfiltered;
     } catch (Throwable $e) {
         error_log('Public discovery query error: ' . $e->getMessage());

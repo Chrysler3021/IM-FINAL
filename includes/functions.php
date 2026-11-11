@@ -413,27 +413,35 @@ function sync_staff_machine_access(
  * Supports searching by machine name, location, identifier, or stocked product name/category.
  * Strictly strips all operator-sensitive data (cost_price, min_threshold, user_id, internal notes).
  */
-function get_public_vending_machines(PDO $db, string $query = '', string $category = ''): array {
+function get_public_vending_machines(PDO $db, string $query = '', string $category = '', bool $includeDemo = true): array {
     $cleanQuery = strtolower(trim($query));
     $cleanCategory = strtolower(trim($category));
     if ($cleanCategory === 'all') {
         $cleanCategory = '';
     }
 
+    $demoFilter = $includeDemo ? "" : "AND u.email != 'demo@vendflow.io' AND u.email NOT LIKE '%test%'";
+
     $mStmt = $db->query("
-        SELECT id, name, identifier, location, status
-        FROM machines
-        WHERE status = 'active'
-        ORDER BY id ASC
+        SELECT m.id, m.name, m.identifier, m.location, m.status
+        FROM machines m
+        JOIN users u ON m.user_id = u.id
+        WHERE m.status = 'active'
+        {$demoFilter}
+        ORDER BY m.id ASC
     ");
     $machines = $mStmt->fetchAll() ?: [];
     if (empty($machines)) {
         return [];
     }
 
+    $machineIds = array_map(fn($m) => (int)$m['id'], $machines);
+    $inClause = implode(',', $machineIds);
+
     $pStmt = $db->query("
         SELECT id, machine_id, name, sku, category, quantity, min_threshold, sell_price, image_url
         FROM products
+        WHERE machine_id IN ({$inClause})
         ORDER BY machine_id ASC, quantity DESC, name ASC
     ");
     $allProducts = $pStmt->fetchAll() ?: [];
@@ -613,7 +621,7 @@ function get_product_velocity_metrics(PDO $db, int $productId, int $daysWindow =
 
     $lStmt = $db->prepare("
         SELECT 
-            COALESCE(SUM(change_qty), 0) AS total_sold,
+            COALESCE(SUM(ABS(change_qty)), 0) AS total_sold,
             COUNT(*) AS sales_count,
             MIN(created_at) AS earliest_sale
         FROM inventory_logs
@@ -641,9 +649,11 @@ function get_product_velocity_metrics(PDO $db, int $productId, int $daysWindow =
         ];
     }
 
-    $earliestTs = !empty($logData['earliest_sale']) ? strtotime($logData['earliest_sale']) : time();
-    $daysSinceEarliest = max(1, (int)ceil((time() - $earliestTs) / 86400));
-    $observedDays = max(1, min($daysWindow, $daysSinceEarliest));
+    $earliestSaleTs = !empty($logData['earliest_sale']) ? strtotime($logData['earliest_sale']) : time();
+    $prodCreatedTs = !empty($prod['created_at']) ? strtotime($prod['created_at']) : $earliestSaleTs;
+    $effectiveStartTs = min($earliestSaleTs, $prodCreatedTs);
+    $activeDays = max(1, (int)ceil((time() - $effectiveStartTs) / 86400));
+    $observedDays = max(1, min($daysWindow, $activeDays));
 
     $dailyVelocity = round($totalSold / $observedDays, 1);
 
@@ -701,7 +711,7 @@ function get_workspace_velocity_recommendations(PDO $db, int $workspaceOwnerId, 
         LEFT JOIN (
             SELECT 
                 product_id,
-                SUM(change_qty) AS total_sold,
+                SUM(ABS(change_qty)) AS total_sold,
                 MIN(created_at) AS earliest_sale
             FROM inventory_logs
             WHERE user_id = :uid
@@ -743,9 +753,11 @@ function get_workspace_velocity_recommendations(PDO $db, int $workspaceOwnerId, 
             continue;
         }
 
-        $earliestTs = !empty($row['earliest_sale']) ? strtotime($row['earliest_sale']) : $nowTs;
-        $daysSinceEarliest = max(1, (int)ceil(($nowTs - $earliestTs) / 86400));
-        $observedDays = max(1, min($daysWindow, $daysSinceEarliest));
+        $earliestSaleTs = !empty($row['earliest_sale']) ? strtotime($row['earliest_sale']) : $nowTs;
+        $prodCreatedTs = !empty($row['product_created_at']) ? strtotime($row['product_created_at']) : $earliestSaleTs;
+        $effectiveStartTs = min($earliestSaleTs, $prodCreatedTs);
+        $activeDays = max(1, (int)ceil(($nowTs - $effectiveStartTs) / 86400));
+        $observedDays = max(1, min($daysWindow, $activeDays));
 
         $dailyVelocity = round($totalSold / $observedDays, 1);
 
@@ -814,13 +826,14 @@ function update_product_par_threshold(PDO $db, int $workspaceOwnerId, int $produ
         $actorName = !empty($_SESSION['user_name']) ? $_SESSION['user_name'] : 'Operator';
         $logStmt = $db->prepare("
             INSERT INTO inventory_logs (
-                user_id, product_id, machine_id, previous_qty, new_qty, change_qty, change_type, notes
+                user_id, actor_name, product_id, machine_id, previous_qty, new_qty, change_qty, change_type, notes
             ) VALUES (
-                :uid, :pid, :mid, :pqty, :nqty, 0, 'adjustment', :notes
+                :uid, :actor, :pid, :mid, :pqty, :nqty, 0, 'adjustment', :notes
             )
         ");
         $logStmt->execute([
             ':uid'   => $workspaceOwnerId,
+            ':actor' => $actorName,
             ':pid'   => $productId,
             ':mid'   => (int)$prod['machine_id'],
             ':pqty'  => (int)$prod['quantity'],

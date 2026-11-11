@@ -127,15 +127,43 @@ assertVelTest("low-stock.php queries workspace velocity recommendations", str_co
 assertVelTest("low-stock.php contains Par Advisor banner markup", str_contains($lowStockSrc, "par-advisor-banner"));
 assertVelTest("low-stock.php contains velocity badge integration in dispatch queue", str_contains($lowStockSrc, "badge-velocity-") || str_contains($lowStockSrc, "get_velocity_badge_info"));
 
-echo "\n8. Testing Inventory Catalog & Modal Integration (inventory.php)...\n";
+echo "\n8. Testing Inventory Catalog & Modal Integration (inventory.php & modals)...\n";
+$modalSrc = file_get_contents(__DIR__ . '/includes/modals.php');
+$appJsSrc = file_get_contents(__DIR__ . '/assets/js/app.js');
+
 assertVelTest("inventory.php queries workspace velocity recommendations", str_contains($invSrc, "get_workspace_velocity_recommendations"));
 assertVelTest("inventory.php renders velocity tags in product cards or table", str_contains($invSrc, "card-velocity-row") || str_contains($invSrc, "badge-velocity-"));
-assertVelTest("inventory.php contains Smart Par Advisor callout in edit modal", str_contains($invSrc, "par-advisor-modal-box") || str_contains($invSrc, "applyModalParSuggestion"));
+assertVelTest("modals.php contains Smart Par Advisor callout in edit modal", str_contains($modalSrc, "par-advisor-modal-box"));
+assertVelTest("app.js contains applyModalParSuggestion handler", str_contains($appJsSrc, "applyModalParSuggestion"));
 
 echo "\n9. Testing Staff Restock Workspace Integration (staff-dashboard.php)...\n";
 $staffSrc = file_get_contents(__DIR__ . '/staff-dashboard.php');
 assertVelTest("staff-dashboard.php queries workspace velocity recommendations", str_contains($staffSrc, "get_workspace_velocity_recommendations"));
 assertVelTest("staff-dashboard.php displays fast-mover cadence indicators in restock ledger", str_contains($staffSrc, "Fast Mover") || str_contains($staffSrc, "badge-velocity-"));
+
+echo "\n10. Testing Real Sales Delta Handling & Demo Account Exclusion...\n";
+// Create product and log sales via apply_stock_adjustment to test negative delta handling
+$pAdjust = $pdo->prepare("INSERT INTO products (user_id, machine_id, name, sku, category, quantity, min_threshold) VALUES (:uid, :mid, 'Real Sale Test', 'RST-99', 'Cold Drinks', 50, 10)");
+$pAdjust->execute([':uid' => $testUid, ':mid' => $testMid]);
+$prodAdjustId = (int)$pdo->lastInsertId();
+
+$opUser = ['id' => $testUid, 'role' => 'operator', 'name' => 'Operator'];
+apply_stock_adjustment($pdo, $testUid, $prodAdjustId, 'manual_sale', 15, 'Register tally sale', $opUser);
+
+$adjustMetrics = get_product_velocity_metrics($pdo, $prodAdjustId, 14);
+assertVelTest("apply_stock_adjustment records negative delta that is correctly aggregated as positive sales", $adjustMetrics['units_sold_window'] === 15);
+assertVelTest("Adjusted product daily velocity is positive (got {$adjustMetrics['daily_velocity']})", $adjustMetrics['daily_velocity'] > 0);
+
+// Test guest catalog excludes demo@vendflow.io and test accounts
+$guestCatalog = get_public_vending_machines($pdo, '', '', false);
+$hasDemoUserMachines = false;
+foreach ($guestCatalog as $gm) {
+    if (str_contains($gm['machine_name'], 'Machine A') || str_contains($gm['machine_name'], 'Machine B')) {
+        $hasDemoUserMachines = true;
+        break;
+    }
+}
+assertVelTest("Guest consumer catalog strictly excludes demo@vendflow.io machines", $hasDemoUserMachines === false);
 
 echo "\n========================================================\n";
 echo "Velocity Test Suite Results: {$passCount} passed, {$failCount} failed\n";

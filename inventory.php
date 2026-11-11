@@ -646,18 +646,4 @@ require_once __DIR__ . '/includes/dashboard_header.php';
     <a href="dashboard.php" class="back-landing-link">&larr; Back to Inventory Overview</a>
 </div>
 
-<script>
-// Dynamic Par Advisor handler for Edit Modal in Inventory
-function applyModalParSuggestion() {
-    if (window.pendingSuggestedPar) {
-        const minThreshInput = document.getElementById('product-min-threshold');
-        if (minThreshInput) {
-            minThreshInput.value = window.pendingSuggestedPar;
-        }
-        const advisorBox = document.getElementById('modal-par-advisor-box');
-        if (advisorBox) advisorBox.style.display = 'none';
-    }
-}
-</script>
-
 <?php require_once __DIR__ . '/includes/dashboard_footer.php'; ?>
