@@ -32,6 +32,7 @@ $db = null;
 $realMachines = [];
 $realProducts = [];
 $realLogs = [];
+$velocityMap = [];
 
 if ($isSessionUser && $user) {
     try {
@@ -69,6 +70,8 @@ if ($isSessionUser && $user) {
             $pStmt->execute([':uid' => $uid]);
             $realProducts = $pStmt->fetchAll();
         }
+
+        $velocityMap = get_workspace_velocity_recommendations($db, $uid);
 
         $lStmt = $db->prepare("
             SELECT l.*, p.name AS product_name, p.sku AS product_sku, m.name AS machine_name 
@@ -478,7 +481,18 @@ $assignedMachinesCount = count($realMachines);
 
                                     <!-- Product Name & Category -->
                                     <td class="py-3.5 px-4 min-w-[200px]">
-                                        <div class="font-bold text-enamel text-sm"><?= htmlspecialchars($item['name']) ?></div>
+                                        <div class="font-bold text-enamel text-sm flex items-center gap-1.5 flex-wrap">
+                                            <span><?= htmlspecialchars($item['name']) ?></span>
+                                            <?php if (!empty($velocityMap[$item['id']]['band']) && $velocityMap[$item['id']]['band'] === 'high'): ?>
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200" title="High daily sales velocity (<?= $velocityMap[$item['id']]['daily_velocity'] ?>/day)">
+                                                    🔥 Fast Mover (Restock 1–2d)
+                                                </span>
+                                            <?php elseif (!empty($velocityMap[$item['id']]['band']) && $velocityMap[$item['id']]['band'] === 'steady'): ?>
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Steady sales velocity">
+                                                    ⚡ Steady (Weekly)
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
                                         <div class="text-steel text-xs mt-0.5"><?= htmlspecialchars($item['category'] ?? 'General') ?></div>
                                     </td>
 

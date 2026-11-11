@@ -132,6 +132,11 @@ assertVelTest("inventory.php queries workspace velocity recommendations", str_co
 assertVelTest("inventory.php renders velocity tags in product cards or table", str_contains($invSrc, "card-velocity-row") || str_contains($invSrc, "badge-velocity-"));
 assertVelTest("inventory.php contains Smart Par Advisor callout in edit modal", str_contains($invSrc, "par-advisor-modal-box") || str_contains($invSrc, "applyModalParSuggestion"));
 
+echo "\n9. Testing Staff Restock Workspace Integration (staff-dashboard.php)...\n";
+$staffSrc = file_get_contents(__DIR__ . '/staff-dashboard.php');
+assertVelTest("staff-dashboard.php queries workspace velocity recommendations", str_contains($staffSrc, "get_workspace_velocity_recommendations"));
+assertVelTest("staff-dashboard.php displays fast-mover cadence indicators in restock ledger", str_contains($staffSrc, "Fast Mover") || str_contains($staffSrc, "badge-velocity-"));
+
 echo "\n========================================================\n";
 echo "Velocity Test Suite Results: {$passCount} passed, {$failCount} failed\n";
 echo "========================================================\n";
