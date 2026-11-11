@@ -95,18 +95,6 @@ $pageSubtitle = $pageSubtitle ?? 'Digital vending machine inventory recordkeepin
                 </li>
 
                 <li>
-                    <a href="low-stock.php" class="menu-item <?= $currentPage === 'low-stock.php' ? 'active' : '' ?>">
-                        <div class="menu-left">
-                            <span class="menu-icon" style="color:#d97706;"><?= posthog_icon('warning') ?></span>
-                            <span>Low stock alerts</span>
-                        </div>
-                        <?php if ($sidebarLowStockCount > 0): ?>
-                            <span class="sidebar-pill-badge alert"><?= $sidebarLowStockCount ?></span>
-                        <?php endif; ?>
-                    </a>
-                </li>
-
-                <li>
                     <a href="inventory.php" class="menu-item <?= $currentPage === 'inventory.php' ? 'active' : '' ?>">
                         <div class="menu-left">
                             <span class="menu-icon"><?= posthog_icon('box') ?></span>
