@@ -1,0 +1,7 @@
+# Development & OS files
+.superpowers/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
