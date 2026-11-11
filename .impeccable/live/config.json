@@ -1,0 +1,9 @@
+{
+  "files": [
+    "includes/footer.php",
+    "includes/dashboard_footer.php"
+  ],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

@@ -1,0 +1,190 @@
+/* VendFlow — Warehouse Ledger & Vending Coil Tray Design System */
+
+:root {
+    /* 6-Color Core Subject Palette */
+    --manifest-paper: #F6F7F4;
+    --tray-white: #FFFFFF;
+    --cabinet-enamel: #182026;
+    --stamped-steel: #4B5862;
+    --coil-wire: #D4DCE0;
+    --tote-blue: #1746A2;
+
+    /* Interaction & Dark Cabinet Support Shades */
+    --tote-blue-hover: #123882;
+    --tote-blue-tint: #EDF2FC;
+    --enamel-surface: #222D35;
+    --enamel-border: #2E3B44;
+    --enamel-muted: #C5D0D6;
+
+    /* Functional Stock Threshold Semantics (Data-driven only) */
+    --stockout-red: #B42318;
+    --stockout-bg: #FEF3F2;
+    --stockout-border: #FECDCA;
+    --below-par-amber: #9A5B00;
+    --below-par-bg: #FFFAEB;
+    --below-par-border: #FEDF89;
+    --at-par-green: #166534;
+    --at-par-bg: #F0FDF4;
+    --at-par-border: #BBF7D0;
+
+    /* Typography */
+    --font-display: 'Bitter', Georgia, serif;
+    --font-sans: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    /* Hierarchy Border Radii */
+    --radius-frame: 12px;
+    --radius-control: 6px;
+    --radius-tag: 4px;
+}
+
+html {
+    background-color: var(--manifest-paper);
+    color: var(--cabinet-enamel);
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.55;
+    background-color: var(--manifest-paper);
+    color: var(--cabinet-enamel);
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--tote-blue);
+}
+
+/* Intentional Type Scale (body qualifier beats Tailwind CDN runtime preflight (0,0,1) while yielding to utility classes (0,1,0)) */
+body h1, body h2, body h3, body h4, .font-display {
+    font-family: var(--font-display);
+    color: inherit;
+    text-wrap: balance;
+}
+
+body h1 {
+    font-size: clamp(2rem, 3.2vw + 1rem, 3rem);
+    line-height: 1.12;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+body h2 {
+    font-size: clamp(1.5rem, 2vw + 0.75rem, 2.125rem);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+}
+
+body h3 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+p, li, dd {
+    text-wrap: pretty;
+}
+
+/* Measure discipline — tuned to Atkinson Hyperlegible glyph metrics (~68-72 characters/line) */
+.prose-measure {
+    max-width: 46ch;
+}
+
+/* Tabular figures on all numeric tables, SKU codes, and stock counters */
+table, .tabular-nums, input[type="number"] {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Selection & Accessible Focus States */
+::selection {
+    background-color: var(--tote-blue);
+    color: var(--tray-white);
+}
+
+a {
+    text-underline-offset: 0.22em;
+}
+
+:focus-visible {
+    outline: 2px solid var(--tote-blue);
+    outline-offset: 2px;
+}
+
+/* Dark surface focus ring visibility */
+.bg-enamel :focus-visible,
+aside :focus-visible,
+footer :focus-visible {
+    outline: 2px solid #93C5FD;
+    outline-offset: 2px;
+}
+
+/* Hero Vending Machine Cabinet & Interactive Coil Slots */
+.cabinet-frame {
+    background-color: var(--cabinet-enamel);
+    border: 1px solid var(--enamel-border);
+    border-radius: var(--radius-frame);
+    padding: 0.875rem;
+    box-shadow: 0 14px 32px -10px rgba(24, 32, 38, 0.24);
+}
+
+.coil-slot {
+    background-color: var(--tray-white);
+    border: 1px solid var(--coil-wire);
+    border-radius: var(--radius-control);
+    padding: 0.875rem;
+    transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+
+.coil-slot[data-slot-state="empty"] {
+    background-color: var(--stockout-bg);
+    border-color: var(--stockout-border);
+}
+
+.coil-slot[data-slot-state="low"] {
+    background-color: var(--below-par-bg);
+    border-color: var(--below-par-border);
+}
+
+.coil-meter-fill {
+    transition: width 180ms ease-out, background-color 180ms ease-out;
+}
+
+/* Disclosure Details Marker Reset */
+details > summary {
+    list-style: none;
+}
+details > summary::-webkit-details-marker {
+    display: none;
+}
+details[open] .faq-chevron {
+    transform: rotate(180deg);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--manifest-paper);
+}
+::-webkit-scrollbar-thumb {
+    background: #B8C4CA;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--stamped-steel);
+}
+
+/* Respect Reduced Motion Globally */
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
