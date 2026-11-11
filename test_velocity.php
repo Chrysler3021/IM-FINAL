@@ -122,6 +122,11 @@ $invSrc = file_get_contents(__DIR__ . '/inventory.php');
 assertVelTest("low-stock.php handles 'apply_par_recommendation' POST action", str_contains($lowStockSrc, "apply_par_recommendation"));
 assertVelTest("inventory.php handles 'apply_par_recommendation' POST action", str_contains($invSrc, "apply_par_recommendation"));
 
+echo "\n7. Testing Low-Stock Alerts UI Integration (low-stock.php)...\n";
+assertVelTest("low-stock.php queries workspace velocity recommendations", str_contains($lowStockSrc, "get_workspace_velocity_recommendations"));
+assertVelTest("low-stock.php contains Par Advisor banner markup", str_contains($lowStockSrc, "par-advisor-banner"));
+assertVelTest("low-stock.php contains velocity badge integration in dispatch queue", str_contains($lowStockSrc, "badge-velocity-") || str_contains($lowStockSrc, "get_velocity_badge_info"));
+
 echo "\n========================================================\n";
 echo "Velocity Test Suite Results: {$passCount} passed, {$failCount} failed\n";
 echo "========================================================\n";

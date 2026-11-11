@@ -54,6 +54,17 @@ $stmt = $db->prepare("
 $stmt->execute([':uid' => $userId]);
 $lowStockItems = $stmt->fetchAll();
 
+// Fetch velocity analysis & dynamic par recommendations
+$velocityMap = get_workspace_velocity_recommendations($db, $userId);
+$underBufferedItems = [];
+foreach ($lowStockItems as $item) {
+    $pid = (int)$item['id'];
+    if (!empty($velocityMap[$pid]['is_under_buffered'])) {
+        $underBufferedItems[] = array_merge($item, $velocityMap[$pid]);
+    }
+}
+$underBufferedCount = count($underBufferedItems);
+
 $totalLowItems        = count($lowStockItems);
 $outOfStockItems      = array_filter($lowStockItems, fn($i) => (int)$i['quantity'] === 0);
 $outOfStockCount      = count($outOfStockItems);
@@ -420,6 +431,43 @@ require_once __DIR__ . '/includes/dashboard_header.php';
     </div>
 </div>
 
+<?php if (!empty($underBufferedItems)): ?>
+<!-- Smart Par Advisor Banner: Fast Movers Under-Buffered -->
+<div class="par-advisor-banner no-print" id="par-advisor-banner">
+    <div class="par-advisor-content">
+        <div class="par-advisor-icon" style="width: 22px; height: 22px; display: inline-flex; align-items: center; color: #d97706;">
+            <?= posthog_icon('bolt') ?>
+        </div>
+        <div>
+            <div class="par-advisor-title">
+                Smart Par Alert: <?= $underBufferedCount ?> fast-moving <?= $underBufferedCount === 1 ? 'item is' : 'items are' ?> under-buffered!
+            </div>
+            <div class="par-advisor-desc">
+                High-turnover products sell rapidly (5+ units/day) but their current par threshold triggers restock alerts too late for high demand. Upgrade par capacity to ensure uninterrupted product availability.
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem;">
+                <?php foreach ($underBufferedItems as $ub): ?>
+                    <div style="background: rgba(255,255,255,0.85); border: 1px solid #fde68a; border-radius: 6px; padding: 0.4rem 0.75rem; display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.78rem;">
+                        <strong style="color: var(--text-main);"><?= e($ub['name']) ?></strong>
+                        <span class="badge-pill badge-velocity-high">🔥 <?= $ub['daily_velocity'] ?> / day</span>
+                        <span style="color: var(--text-muted);">Current Par: <strong><?= $ub['min_threshold'] ?></strong> &rarr; Rec: <strong style="color: #166534; font-size: 0.82rem;"><?= $ub['recommended_par'] ?></strong></span>
+                        <form method="POST" style="margin: 0; display: inline;">
+                            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                            <input type="hidden" name="action" value="apply_par_recommendation">
+                            <input type="hidden" name="product_id" value="<?= (int)$ub['id'] ?>">
+                            <input type="hidden" name="recommended_par" value="<?= (int)$ub['recommended_par'] ?>">
+                            <button type="submit" class="btn-par-apply" title="Update par threshold to <?= (int)$ub['recommended_par'] ?>">
+                                <span>Apply Par <?= (int)$ub['recommended_par'] ?></span> &rarr;
+                            </button>
+                        </form>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- 3. Dispatch Pick-List Table Card -->
 <div class="overview-card-box">
     
@@ -457,11 +505,12 @@ require_once __DIR__ . '/includes/dashboard_header.php';
             <table class="posthog-data-table" id="lowstock-table">
                 <thead>
                     <tr>
-                        <th style="width: 32%;">Product &amp; Category</th>
-                        <th style="width: 14%;">SKU</th>
-                        <th style="width: 22%;">Machine &amp; Placement</th>
-                        <th style="width: 12%; text-align: right;">Current / Par</th>
-                        <th style="width: 10%; text-align: right;">Tote Load</th>
+                        <th style="width: 25%;">Product &amp; Category</th>
+                        <th style="width: 12%;">SKU</th>
+                        <th style="width: 18%;">Machine &amp; Placement</th>
+                        <th style="width: 17%;">Velocity &amp; Cadence</th>
+                        <th style="width: 10%; text-align: right;">Current / Par</th>
+                        <th style="width: 8%; text-align: right;">Tote Load</th>
                         <th style="width: 10%; text-align: right;" class="no-print">Action</th>
                     </tr>
                 </thead>
@@ -474,6 +523,9 @@ require_once __DIR__ . '/includes/dashboard_header.php';
                         $percent   = min(100, (int)round(($qty / $par) * 100));
                         $fillClass = $isOut ? 'fill-out' : ($percent <= 40 ? 'fill-crit' : 'fill-warn');
                         $imageSrc  = get_product_image($item);
+
+                        $velMetrics = $velocityMap[$item['id']] ?? null;
+                        $vInfo      = get_velocity_badge_info($velMetrics);
 
                         $searchHaystack = strtolower(
                             $item['name'] . ' ' .
@@ -523,6 +575,19 @@ require_once __DIR__ . '/includes/dashboard_header.php';
                                 <div class="cell-machine-loc" style="display: flex; align-items: center; gap: 3px;">
                                     <span style="width: 11px; height: 11px; display: inline-flex; color: var(--text-muted); flex-shrink: 0;"><?= posthog_icon('mappin') ?></span>
                                     <span><?= e($item['machine_location']) ?></span>
+                                </div>
+                            </td>
+
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: 3px;">
+                                    <div>
+                                        <span class="badge-pill <?= e($vInfo['class']) ?>" style="font-size: 0.72rem;">
+                                            <?= $vInfo['label'] ?>
+                                        </span>
+                                    </div>
+                                    <span style="font-size: 0.71rem; color: var(--text-muted);">
+                                        <?= e($vInfo['cadence']) ?>
+                                    </span>
                                 </div>
                             </td>
 
