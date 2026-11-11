@@ -575,3 +575,322 @@ function get_public_vending_machines(PDO $db, string $query = '', string $catego
 
     return $result;
 }
+
+
+// -----------------------------------------------------------------------------
+// Sales Velocity Engine & Smart Par Advisor
+// -----------------------------------------------------------------------------
+
+/**
+ * Calculates rolling sales velocity metrics, turnover classification, and smart par recommendation for a product.
+ *
+ * @param PDO $db
+ * @param int $productId
+ * @param int $daysWindow Lookback window in days (default: 14)
+ * @return array
+ */
+function get_product_velocity_metrics(PDO $db, int $productId, int $daysWindow = 14): array {
+    $pStmt = $db->prepare("SELECT id, user_id, machine_id, name, min_threshold, quantity, created_at FROM products WHERE id = :id");
+    $pStmt->execute([':id' => $productId]);
+    $prod = $pStmt->fetch();
+
+    if (!$prod) {
+        return [
+            'product_id'        => $productId,
+            'product_name'      => '',
+            'daily_velocity'    => 0.0,
+            'units_sold_window' => 0,
+            'days_observed'     => $daysWindow,
+            'band'              => 'new',
+            'cadence_label'     => 'Baseline pending',
+            'recommended_par'   => 10,
+            'is_under_buffered' => false,
+            'buffer_deficit'    => 0,
+        ];
+    }
+
+    $currentPar = max(1, (int)$prod['min_threshold']);
+
+    $lStmt = $db->prepare("
+        SELECT 
+            COALESCE(SUM(change_qty), 0) AS total_sold,
+            COUNT(*) AS sales_count,
+            MIN(created_at) AS earliest_sale
+        FROM inventory_logs
+        WHERE product_id = :pid
+          AND change_type = 'manual_sale'
+          AND created_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+    ");
+    $lStmt->execute([':pid' => $productId, ':days' => $daysWindow]);
+    $logData = $lStmt->fetch() ?: ['total_sold' => 0, 'sales_count' => 0, 'earliest_sale' => null];
+
+    $totalSold = (int)$logData['total_sold'];
+
+    if ($totalSold <= 0) {
+        return [
+            'product_id'        => $productId,
+            'product_name'      => $prod['name'],
+            'daily_velocity'    => 0.0,
+            'units_sold_window' => 0,
+            'days_observed'     => $daysWindow,
+            'band'              => 'new',
+            'cadence_label'     => 'Baseline pending',
+            'recommended_par'   => max(5, $currentPar),
+            'is_under_buffered' => false,
+            'buffer_deficit'    => 0,
+        ];
+    }
+
+    $earliestTs = !empty($logData['earliest_sale']) ? strtotime($logData['earliest_sale']) : time();
+    $daysSinceEarliest = max(1, (int)ceil((time() - $earliestTs) / 86400));
+    $observedDays = max(1, min($daysWindow, $daysSinceEarliest));
+
+    $dailyVelocity = round($totalSold / $observedDays, 1);
+
+    if ($dailyVelocity >= 5.0) {
+        $band = 'high';
+        $cadenceLabel = 'Restock every 1–2 days';
+        $recommendedPar = (int)(ceil($dailyVelocity * 2) + 2);
+    } elseif ($dailyVelocity >= 1.0) {
+        $band = 'steady';
+        $cadenceLabel = 'Restock weekly';
+        $recommendedPar = (int)ceil($dailyVelocity * 7);
+    } else {
+        $band = 'slow';
+        $cadenceLabel = 'Restock bi-weekly / as needed';
+        $recommendedPar = max(5, $currentPar);
+    }
+
+    $isUnderBuffered = ($band === 'high' && $currentPar < $recommendedPar);
+    $bufferDeficit   = max(0, $recommendedPar - $currentPar);
+
+    return [
+        'product_id'        => $productId,
+        'product_name'      => $prod['name'],
+        'daily_velocity'    => $dailyVelocity,
+        'units_sold_window' => $totalSold,
+        'days_observed'     => $observedDays,
+        'band'              => $band,
+        'cadence_label'     => $cadenceLabel,
+        'recommended_par'   => $recommendedPar,
+        'is_under_buffered' => $isUnderBuffered,
+        'buffer_deficit'    => $bufferDeficit,
+    ];
+}
+
+/**
+ * Returns batched velocity metrics and par recommendations for all products in a workspace.
+ *
+ * @param PDO $db
+ * @param int $workspaceOwnerId
+ * @param int $daysWindow Lookback window in days (default: 14)
+ * @return array Keyed by product_id
+ */
+function get_workspace_velocity_recommendations(PDO $db, int $workspaceOwnerId, int $daysWindow = 14): array {
+    $stmt = $db->prepare("
+        SELECT 
+            p.id AS product_id,
+            p.name AS product_name,
+            p.min_threshold,
+            p.quantity,
+            p.machine_id,
+            p.created_at AS product_created_at,
+            COALESCE(s.total_sold, 0) AS total_sold,
+            s.earliest_sale
+        FROM products p
+        LEFT JOIN (
+            SELECT 
+                product_id,
+                SUM(change_qty) AS total_sold,
+                MIN(created_at) AS earliest_sale
+            FROM inventory_logs
+            WHERE user_id = :uid
+              AND change_type = 'manual_sale'
+              AND created_at >= DATE_SUB(NOW(), INTERVAL :days DAY)
+            GROUP BY product_id
+        ) s ON p.id = s.product_id
+        WHERE p.user_id = :uid2
+        ORDER BY p.name ASC
+    ");
+    $stmt->execute([
+        ':uid'   => $workspaceOwnerId,
+        ':days'  => $daysWindow,
+        ':uid2'  => $workspaceOwnerId
+    ]);
+    $rows = $stmt->fetchAll() ?: [];
+
+    $results = [];
+    $nowTs = time();
+
+    foreach ($rows as $row) {
+        $pid        = (int)$row['product_id'];
+        $currentPar = max(1, (int)$row['min_threshold']);
+        $totalSold  = (int)$row['total_sold'];
+
+        if ($totalSold <= 0) {
+            $results[$pid] = [
+                'product_id'        => $pid,
+                'product_name'      => $row['product_name'],
+                'daily_velocity'    => 0.0,
+                'units_sold_window' => 0,
+                'days_observed'     => $daysWindow,
+                'band'              => 'new',
+                'cadence_label'     => 'Baseline pending',
+                'recommended_par'   => max(5, $currentPar),
+                'is_under_buffered' => false,
+                'buffer_deficit'    => 0,
+            ];
+            continue;
+        }
+
+        $earliestTs = !empty($row['earliest_sale']) ? strtotime($row['earliest_sale']) : $nowTs;
+        $daysSinceEarliest = max(1, (int)ceil(($nowTs - $earliestTs) / 86400));
+        $observedDays = max(1, min($daysWindow, $daysSinceEarliest));
+
+        $dailyVelocity = round($totalSold / $observedDays, 1);
+
+        if ($dailyVelocity >= 5.0) {
+            $band = 'high';
+            $cadenceLabel = 'Restock every 1–2 days';
+            $recommendedPar = (int)(ceil($dailyVelocity * 2) + 2);
+        } elseif ($dailyVelocity >= 1.0) {
+            $band = 'steady';
+            $cadenceLabel = 'Restock weekly';
+            $recommendedPar = (int)ceil($dailyVelocity * 7);
+        } else {
+            $band = 'slow';
+            $cadenceLabel = 'Restock bi-weekly / as needed';
+            $recommendedPar = max(5, $currentPar);
+        }
+
+        $isUnderBuffered = ($band === 'high' && $currentPar < $recommendedPar);
+        $bufferDeficit   = max(0, $recommendedPar - $currentPar);
+
+        $results[$pid] = [
+            'product_id'        => $pid,
+            'product_name'      => $row['product_name'],
+            'daily_velocity'    => $dailyVelocity,
+            'units_sold_window' => $totalSold,
+            'days_observed'     => $observedDays,
+            'band'              => $band,
+            'cadence_label'     => $cadenceLabel,
+            'recommended_par'   => $recommendedPar,
+            'is_under_buffered' => $isUnderBuffered,
+            'buffer_deficit'    => $bufferDeficit,
+        ];
+    }
+
+    return $results;
+}
+
+/**
+ * Updates a product's par threshold capacity atomically with tenant isolation and audit logging.
+ *
+ * @param PDO $db
+ * @param int $workspaceOwnerId
+ * @param int $productId
+ * @param int $newParThreshold
+ * @return bool
+ */
+function update_product_par_threshold(PDO $db, int $workspaceOwnerId, int $productId, int $newParThreshold): bool {
+    $newPar = max(1, $newParThreshold);
+
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare("SELECT id, name, machine_id, quantity, min_threshold FROM products WHERE id = :id AND user_id = :uid FOR UPDATE");
+        $stmt->execute([':id' => $productId, ':uid' => $workspaceOwnerId]);
+        $prod = $stmt->fetch();
+
+        if (!$prod) {
+            $db->rollBack();
+            return false;
+        }
+
+        $oldPar = (int)$prod['min_threshold'];
+
+        $up = $db->prepare("UPDATE products SET min_threshold = :par WHERE id = :id AND user_id = :uid");
+        $up->execute([':par' => $newPar, ':id' => $productId, ':uid' => $workspaceOwnerId]);
+
+        $actorName = !empty($_SESSION['user_name']) ? $_SESSION['user_name'] : 'Operator';
+        $logStmt = $db->prepare("
+            INSERT INTO inventory_logs (
+                user_id, product_id, machine_id, previous_qty, new_qty, change_qty, change_type, notes
+            ) VALUES (
+                :uid, :pid, :mid, :pqty, :nqty, 0, 'adjustment', :notes
+            )
+        ");
+        $logStmt->execute([
+            ':uid'   => $workspaceOwnerId,
+            ':pid'   => $productId,
+            ':mid'   => (int)$prod['machine_id'],
+            ':pqty'  => (int)$prod['quantity'],
+            ':nqty'  => (int)$prod['quantity'],
+            ':notes' => "Par threshold updated from {$oldPar} to {$newPar} units (Par Advisor recommendation)"
+        ]);
+
+        $db->commit();
+        return true;
+    } catch (Throwable $t) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        return false;
+    }
+}
+
+/**
+ * Formats velocity metadata into PostHog UI tags and icon descriptors.
+ *
+ * @param array|null $velocityMetrics
+ * @return array
+ */
+function get_velocity_badge_info(?array $velocityMetrics): array {
+    if (!$velocityMetrics) {
+        return [
+            'label'     => 'New SKU',
+            'class'     => 'badge-velocity-new',
+            'icon_name' => 'sparkles',
+            'cadence'   => 'Baseline pending',
+            'v_daily'   => 0.0,
+        ];
+    }
+
+    $band = $velocityMetrics['band'] ?? 'new';
+    $vDaily = (float)($velocityMetrics['daily_velocity'] ?? 0.0);
+    $cadence = $velocityMetrics['cadence_label'] ?? 'Baseline pending';
+
+    switch ($band) {
+        case 'high':
+            return [
+                'label'     => '🔥 Fast Mover',
+                'class'     => 'badge-velocity-high',
+                'icon_name' => 'fire',
+                'cadence'   => $cadence,
+                'v_daily'   => $vDaily,
+            ];
+        case 'steady':
+            return [
+                'label'     => '⚡ Steady Mover',
+                'class'     => 'badge-velocity-steady',
+                'icon_name' => 'trending_up',
+                'cadence'   => $cadence,
+                'v_daily'   => $vDaily,
+            ];
+        case 'slow':
+            return [
+                'label'     => '🐢 Slow Mover',
+                'class'     => 'badge-velocity-slow',
+                'icon_name' => 'clock',
+                'cadence'   => $cadence,
+                'v_daily'   => $vDaily,
+            ];
+        default:
+            return [
+                'label'     => '✨ New SKU',
+                'class'     => 'badge-velocity-new',
+                'icon_name' => 'sparkles',
+                'cadence'   => 'Baseline pending',
+                'v_daily'   => 0.0,
+            ];
+    }
+}
