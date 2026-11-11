@@ -1533,22 +1533,12 @@ $placeholderVendoImages = [
 
             <!-- Balanced Desktop Art Showcase Plate -->
             <div class="hero-art-w">
-                <div class="floating-badge top-badge">
-                    <span class="floating-badge-icon"><?= posthog_icon('bolt') ?></span>
-                    <span>18 Cold Drinks Ready</span>
-                </div>
-
                 <div class="hero-showcase-card">
                     <img
                         src="assets/images/vendos/vendo-candies.jpg"
                         alt="VendFlow Machine Network Showcase"
                         class="hero-showcase-img"
                     >
-                </div>
-
-                <div class="floating-badge bottom-badge">
-                    <span class="floating-badge-icon"><?= posthog_icon('map_pin') ?></span>
-                    <span>Student Union &bull; 0.1 mi</span>
                 </div>
             </div>
         </section>
