@@ -244,6 +244,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash('success', 'Product SKU removed from your inventory ledger.');
         redirect($returnPage);
     }
+
+    // 5. Apply Smart Par Recommendation (Par Advisor)
+    if ($action === 'apply_par_recommendation') {
+        $prodId = (int)($_POST['product_id'] ?? 0);
+        $newPar = max(1, (int)($_POST['recommended_par'] ?? 0));
+
+        if ($prodId > 0 && $newPar > 0) {
+            $ok = update_product_par_threshold($db, $userId, $prodId, $newPar);
+            if ($ok) {
+                set_flash('success', "Updated par capacity to {$newPar} units per Par Advisor recommendation.");
+            } else {
+                set_flash('error', "Could not update par threshold for the selected product.");
+            }
+        }
+        redirect($returnPage);
+    }
 }
 
 // -----------------------------------------------------------------------------

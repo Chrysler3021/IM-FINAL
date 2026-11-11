@@ -10,6 +10,30 @@ $db = get_db();
 $userId = get_workspace_owner_id($user);
 $currency = $user['currency'] ?: '$';
 
+// Handle POST Mutations (Par Advisor 1-Click Optimization)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        set_flash('error', 'Security token expired. Please submit the request again.');
+        redirect('low-stock.php');
+    }
+
+    $action = $_POST['action'] ?? '';
+    if ($action === 'apply_par_recommendation') {
+        $prodId = (int)($_POST['product_id'] ?? 0);
+        $newPar = max(1, (int)($_POST['recommended_par'] ?? 0));
+
+        if ($prodId > 0 && $newPar > 0) {
+            $ok = update_product_par_threshold($db, $userId, $prodId, $newPar);
+            if ($ok) {
+                set_flash('success', "Updated par capacity to {$newPar} units per Par Advisor recommendation.");
+            } else {
+                set_flash('error', "Could not update par threshold for the selected product.");
+            }
+        }
+        redirect('low-stock.php');
+    }
+}
+
 // Fetch all registered machines for operator dropdown filtering
 $mStmt = $db->prepare("SELECT id, name, location FROM machines WHERE user_id = :uid ORDER BY name ASC");
 $mStmt->execute([':uid' => $userId]);

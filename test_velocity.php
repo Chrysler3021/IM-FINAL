@@ -115,6 +115,13 @@ $badgeInfo = get_velocity_badge_info($fastMetrics);
 assertVelTest("High velocity badge class is 'badge-velocity-high'", str_contains($badgeInfo['class'], 'badge-velocity-high'));
 assertVelTest("High velocity cadence specifies 1-2 days", str_contains($badgeInfo['cadence'], '1–2'));
 
+echo "\n6. Testing Par Advisor POST Action Handlers...\n";
+$lowStockSrc = file_get_contents(__DIR__ . '/low-stock.php');
+$invSrc = file_get_contents(__DIR__ . '/inventory.php');
+
+assertVelTest("low-stock.php handles 'apply_par_recommendation' POST action", str_contains($lowStockSrc, "apply_par_recommendation"));
+assertVelTest("inventory.php handles 'apply_par_recommendation' POST action", str_contains($invSrc, "apply_par_recommendation"));
+
 echo "\n========================================================\n";
 echo "Velocity Test Suite Results: {$passCount} passed, {$failCount} failed\n";
 echo "========================================================\n";
