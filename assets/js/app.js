@@ -196,7 +196,21 @@ function openAddProductModal(defaultMachineId = '') {
         if (select) select.value = defaultMachineId;
     }
 
+    const advisorBox = document.getElementById('modal-par-advisor-box');
+    if (advisorBox) advisorBox.style.display = 'none';
+
     openModal('product-modal');
+}
+
+function applyModalParSuggestion() {
+    if (window.pendingSuggestedPar) {
+        const minThreshInput = document.getElementById('product-min-threshold');
+        if (minThreshInput) {
+            minThreshInput.value = window.pendingSuggestedPar;
+        }
+        const advisorBox = document.getElementById('modal-par-advisor-box');
+        if (advisorBox) advisorBox.style.display = 'none';
+    }
 }
 
 function openEditProductModal(product) {
@@ -216,6 +230,21 @@ function openEditProductModal(product) {
     document.getElementById('product-cost-price').value = product.cost_price || 0.00;
     document.getElementById('product-sell-price').value = product.sell_price || 0.00;
     document.getElementById('product-notes').value = product.notes || '';
+
+    const advisorBox = document.getElementById('modal-par-advisor-box');
+    const advisorText = document.getElementById('modal-par-advisor-text');
+    if (advisorBox && advisorText) {
+        const curPar = parseInt(product.min_threshold, 10) || 0;
+        const recPar = parseInt(product.recommended_par, 10) || 0;
+        if (recPar > 0 && recPar !== curPar) {
+            window.pendingSuggestedPar = recPar;
+            advisorText.textContent = `Recommended par is ${recPar} units (${product.daily_velocity || 0} sales/day, ${product.cadence_label || 'cadence'}).`;
+            advisorBox.style.display = 'flex';
+        } else {
+            window.pendingSuggestedPar = null;
+            advisorBox.style.display = 'none';
+        }
+    }
 
     openModal('product-modal');
 }

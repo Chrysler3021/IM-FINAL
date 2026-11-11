@@ -284,6 +284,9 @@ $prodStmt = $db->prepare("
 $prodStmt->execute([':uid' => $userId]);
 $allProducts = $prodStmt->fetchAll();
 
+// Fetch rolling sales velocity metrics & dynamic par recommendations
+$velocityMap = get_workspace_velocity_recommendations($db, $userId);
+
 $totalCount  = count($allProducts);
 $drinksCount = 0;
 $candyCount  = 0;
@@ -419,19 +422,26 @@ require_once __DIR__ . '/includes/dashboard_header.php';
             $needed   = max(1, $par - $qty);
             $searchBlob = strtolower($p['name'] . ' ' . $p['sku'] . ' ' . $p['machine_name'] . ' ' . $p['category']);
 
+            $velMetrics = $velocityMap[$p['id']] ?? null;
+            $vInfo      = get_velocity_badge_info($velMetrics);
+
             $jsProductPayload = htmlspecialchars(json_encode([
-                'id'            => (int)$p['id'],
-                'machine_id'    => (int)$p['machine_id'],
-                'machine_name'  => $p['machine_name'],
-                'name'          => $p['name'],
-                'sku'           => $p['sku'],
-                'category'      => $p['category'],
-                'quantity'      => $qty,
-                'min_threshold' => $par,
-                'cost_price'    => number_format((float)$p['cost_price'], 2, '.', ''),
-                'sell_price'    => number_format((float)$p['sell_price'], 2, '.', ''),
-                'image_url'     => $imgSrc,
-                'notes'         => $p['notes'] ?? ''
+                'id'              => (int)$p['id'],
+                'machine_id'      => (int)$p['machine_id'],
+                'machine_name'    => $p['machine_name'],
+                'name'            => $p['name'],
+                'sku'             => $p['sku'],
+                'category'        => $p['category'],
+                'quantity'        => $qty,
+                'min_threshold'   => $par,
+                'cost_price'      => number_format((float)$p['cost_price'], 2, '.', ''),
+                'sell_price'      => number_format((float)$p['sell_price'], 2, '.', ''),
+                'image_url'       => $imgSrc,
+                'notes'           => $p['notes'] ?? '',
+                'daily_velocity'  => (float)($velMetrics['daily_velocity'] ?? 0.0),
+                'velocity_band'   => $velMetrics['band'] ?? 'new',
+                'cadence_label'   => $velMetrics['cadence_label'] ?? '',
+                'recommended_par' => (int)($velMetrics['recommended_par'] ?? $par)
             ]), ENT_QUOTES, 'UTF-8');
         ?>
             <div
@@ -452,6 +462,15 @@ require_once __DIR__ . '/includes/dashboard_header.php';
                     <div class="card-product-sku-row">
                         <span>SKU: <strong><?= e($p['sku']) ?></strong></span>
                         <span>Cost <?= format_currency((float)$p['cost_price'], $currency) ?></span>
+                    </div>
+
+                    <div class="card-velocity-row" style="margin-top: 0.35rem; display: flex; align-items: center; justify-content: space-between;">
+                        <span class="badge-pill <?= e($vInfo['class']) ?>" style="font-size: 0.7rem;">
+                            <?= $vInfo['label'] ?>
+                        </span>
+                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">
+                            <?= e($vInfo['cadence']) ?>
+                        </span>
                     </div>
 
                     <div class="card-machine-loc" title="<?= e($p['machine_location']) ?>">
@@ -534,19 +553,26 @@ require_once __DIR__ . '/includes/dashboard_header.php';
                         $imgSrc  = get_product_image($p);
                         $searchBlob = strtolower($p['name'] . ' ' . $p['sku'] . ' ' . $p['machine_name'] . ' ' . $p['category']);
 
+                        $velMetrics = $velocityMap[$p['id']] ?? null;
+                        $vInfo      = get_velocity_badge_info($velMetrics);
+
                         $jsProductPayload = htmlspecialchars(json_encode([
-                            'id'            => (int)$p['id'],
-                            'machine_id'    => (int)$p['machine_id'],
-                            'machine_name'  => $p['machine_name'],
-                            'name'          => $p['name'],
-                            'sku'           => $p['sku'],
-                            'category'      => $p['category'],
-                            'quantity'      => $qty,
-                            'min_threshold' => $par,
-                            'cost_price'    => number_format((float)$p['cost_price'], 2, '.', ''),
-                            'sell_price'    => number_format((float)$p['sell_price'], 2, '.', ''),
-                            'image_url'     => $imgSrc,
-                            'notes'         => $p['notes'] ?? ''
+                            'id'              => (int)$p['id'],
+                            'machine_id'      => (int)$p['machine_id'],
+                            'machine_name'    => $p['machine_name'],
+                            'name'            => $p['name'],
+                            'sku'             => $p['sku'],
+                            'category'        => $p['category'],
+                            'quantity'        => $qty,
+                            'min_threshold'   => $par,
+                            'cost_price'      => number_format((float)$p['cost_price'], 2, '.', ''),
+                            'sell_price'      => number_format((float)$p['sell_price'], 2, '.', ''),
+                            'image_url'       => $imgSrc,
+                            'notes'           => $p['notes'] ?? '',
+                            'daily_velocity'  => (float)($velMetrics['daily_velocity'] ?? 0.0),
+                            'velocity_band'   => $velMetrics['band'] ?? 'new',
+                            'cadence_label'   => $velMetrics['cadence_label'] ?? '',
+                            'recommended_par' => (int)($velMetrics['recommended_par'] ?? $par)
                         ]), ENT_QUOTES, 'UTF-8');
                     ?>
                         <tr
@@ -573,8 +599,9 @@ require_once __DIR__ . '/includes/dashboard_header.php';
                                 <div class="cell-machine-loc"><?= e($p['machine_location']) ?></div>
                             </td>
                             <td>
-                                <div style="font-size: 0.78rem; font-weight: 700; margin-bottom: 4px;">
-                                    <?= $qty ?> / <?= $par ?> units
+                                <div style="font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+                                    <span><?= $qty ?> / <?= $par ?> units</span>
+                                    <span class="badge-pill <?= e($vInfo['class']) ?>" style="font-size: 0.68rem;"><?= $vInfo['label'] ?></span>
                                 </div>
                                 <div class="stock-progress-track">
                                     <div class="stock-progress-fill <?= $fillCls ?>" style="width: <?= $percent ?>%;"></div>
@@ -618,5 +645,19 @@ require_once __DIR__ . '/includes/dashboard_header.php';
 <div>
     <a href="dashboard.php" class="back-landing-link">&larr; Back to Inventory Overview</a>
 </div>
+
+<script>
+// Dynamic Par Advisor handler for Edit Modal in Inventory
+function applyModalParSuggestion() {
+    if (window.pendingSuggestedPar) {
+        const minThreshInput = document.getElementById('product-min-threshold');
+        if (minThreshInput) {
+            minThreshInput.value = window.pendingSuggestedPar;
+        }
+        const advisorBox = document.getElementById('modal-par-advisor-box');
+        if (advisorBox) advisorBox.style.display = 'none';
+    }
+}
+</script>
 
 <?php require_once __DIR__ . '/includes/dashboard_footer.php'; ?>

@@ -104,6 +104,17 @@ $modalReturnPage = basename($_SERVER['PHP_SELF']);
                     </div>
                 </div>
 
+                <!-- Smart Par Advisor Modal Callout -->
+                <div id="modal-par-advisor-box" class="par-advisor-modal-box" style="display: none; margin-bottom: 1rem;">
+                    <div class="par-advisor-modal-text">
+                        <span style="font-weight: 700;">⚡ Par Advisor: </span>
+                        <span id="modal-par-advisor-text">Suggested par is 15 units based on sales velocity.</span>
+                    </div>
+                    <button type="button" class="btn-advisor-modal-apply" id="btn-apply-modal-par" onclick="applyModalParSuggestion()">
+                        Use suggested par
+                    </button>
+                </div>
+
                 <!-- Assigned Machine & Category -->
                 <div class="form-grid-2">
                     <div class="form-group-item">

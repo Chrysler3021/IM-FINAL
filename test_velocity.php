@@ -127,6 +127,11 @@ assertVelTest("low-stock.php queries workspace velocity recommendations", str_co
 assertVelTest("low-stock.php contains Par Advisor banner markup", str_contains($lowStockSrc, "par-advisor-banner"));
 assertVelTest("low-stock.php contains velocity badge integration in dispatch queue", str_contains($lowStockSrc, "badge-velocity-") || str_contains($lowStockSrc, "get_velocity_badge_info"));
 
+echo "\n8. Testing Inventory Catalog & Modal Integration (inventory.php)...\n";
+assertVelTest("inventory.php queries workspace velocity recommendations", str_contains($invSrc, "get_workspace_velocity_recommendations"));
+assertVelTest("inventory.php renders velocity tags in product cards or table", str_contains($invSrc, "card-velocity-row") || str_contains($invSrc, "badge-velocity-"));
+assertVelTest("inventory.php contains Smart Par Advisor callout in edit modal", str_contains($invSrc, "par-advisor-modal-box") || str_contains($invSrc, "applyModalParSuggestion"));
+
 echo "\n========================================================\n";
 echo "Velocity Test Suite Results: {$passCount} passed, {$failCount} failed\n";
 echo "========================================================\n";
