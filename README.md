@@ -110,11 +110,11 @@ The initial demo account is pre-populated with the exact sample data required in
 1. Ensure **MySQL** is started (e.g. click "Start" next to MySQL in XAMPP Control Panel, or run `run.bat`).
 2. Double-click `run.bat` or run the built-in server manually:
    ```bash
-   php -S 127.0.0.1:8000
+   php -S 127.0.0.1:8080
    ```
 3. Open your browser and navigate to:
    ```
-   http://127.0.0.1:8000/
+   http://127.0.0.1:8080/
    ```
 
 ### Default Demo Credentials

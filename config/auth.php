@@ -220,7 +220,7 @@ function can_manage_machines(?array $user = null): bool {
 function can_manage_prices(?array $user = null): bool {
     $u = $user ?? current_user();
     if (!$u) return false;
-    if (($u['role'] ?? '') === 'operator' || ($u['role'] ?? '') === 'superadmin' || is_staff($u)) {
+    if (($u['role'] ?? '') === 'operator' || ($u['role'] ?? '') === 'superadmin') {
         return true;
     }
     return !empty($u['can_manage_prices']);

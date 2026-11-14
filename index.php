@@ -337,6 +337,7 @@ $placeholderVendoImages = [
         /* Docked Hero Search Form */
         .hero-search-box {
             margin-bottom: 24px;
+            position: relative;
         }
 
         .search-bar-form {
@@ -412,6 +413,131 @@ $placeholderVendoImages = [
 
         .search-submit-btn:hover {
             background: var(--secondary-hover);
+        }
+
+        /* Floating Instant Omnisearch Dropdown */
+        .omnisearch-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: var(--card-bg, #ffffff);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.15), 0 6px 16px rgba(0, 0, 0, 0.08);
+            z-index: 1000;
+            max-height: 440px;
+            overflow-y: auto;
+            display: none;
+            padding: 8px 0;
+            backdrop-filter: blur(8px);
+        }
+
+        .omnisearch-dropdown.active {
+            display: block;
+        }
+
+        .omnisearch-section-title {
+            padding: 10px 18px 4px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--mute);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .omnisearch-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 18px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .omnisearch-item:hover,
+        .omnisearch-item.selected {
+            background: var(--platinum);
+        }
+
+        .omnisearch-item-thumb {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            object-fit: contain;
+            background: #f8f9fa;
+            border: 1px solid var(--line);
+            padding: 3px;
+            flex-shrink: 0;
+        }
+
+        .omnisearch-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .omnisearch-item-name {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--black);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .omnisearch-item-sub {
+            font-size: 0.76rem;
+            color: var(--mute);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+        }
+
+        .omnisearch-item-badge {
+            font-size: 0.86rem;
+            font-weight: 700;
+            color: var(--secondary-text);
+            flex-shrink: 0;
+        }
+
+        .omnisearch-empty {
+            padding: 24px 18px;
+            text-align: center;
+            color: var(--mute);
+            font-size: 0.88rem;
+        }
+
+        .omnisearch-footer-action {
+            border-top: 1px solid var(--line);
+            padding: 10px 18px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--secondary-text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.15s ease;
+        }
+
+        .omnisearch-footer-action:hover {
+            background: var(--platinum);
+        }
+
+        @keyframes cardPulseHighlight {
+            0% { box-shadow: 0 0 0 0 rgba(252, 163, 17, 0.7); }
+            50% { box-shadow: 0 0 0 8px rgba(252, 163, 17, 0.4); }
+            100% { box-shadow: 0 0 0 0 rgba(252, 163, 17, 0); }
+        }
+
+        .card-pulse {
+            animation: cardPulseHighlight 1.5s ease-out;
         }
 
         .quick-filter-tags {
@@ -1514,6 +1640,9 @@ $placeholderVendoImages = [
                         <button type="submit" class="search-submit-btn">Search</button>
                     </form>
 
+                    <!-- Instant Omnisearch Live Autocomplete Dropdown -->
+                    <div id="omnisearch-dropdown" class="omnisearch-dropdown" role="listbox" aria-label="Search suggestions"></div>
+
                     <div class="quick-filter-tags">
                         <button type="button" class="filter-chip <?= ($searchQuery === '' && $selectedCategory === '') ? 'active' : '' ?>" onclick="applyQuickSearch('')">All Vendos</button>
                         <button type="button" class="filter-chip" onclick="applyQuickSearch('Potato Chips')">Potato Chips</button>
@@ -1893,10 +2022,193 @@ $placeholderVendoImages = [
 
         const searchInput = document.getElementById('public-search-input');
         const clearBtn = document.getElementById('clear-search-btn');
+        const searchForm = document.getElementById('public-search-form');
+        const omnisearchDropdown = document.getElementById('omnisearch-dropdown');
         const vendoCards = Array.from(document.querySelectorAll('.vendo-card'));
         const spotlightCards = Array.from(document.querySelectorAll('.shake'));
         const emptyStateBox = document.getElementById('empty-vendo-state');
         const resultsSubtitle = document.getElementById('vendo-results-subtitle');
+
+        let selectedDropdownIndex = -1;
+
+        function closeOmnisearch() {
+            if (omnisearchDropdown) {
+                omnisearchDropdown.classList.remove('active');
+                omnisearchDropdown.innerHTML = '';
+            }
+            selectedDropdownIndex = -1;
+        }
+
+        function scrollToMachineCard(machineId) {
+            const card = document.querySelector(`.vendo-card[data-machine-id="${machineId}"]`);
+            if (card) {
+                card.style.display = 'flex';
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.remove('card-pulse');
+                void card.offsetWidth;
+                card.classList.add('card-pulse');
+                setTimeout(() => card.classList.remove('card-pulse'), 1800);
+            }
+        }
+
+        function submitPublicSearch() {
+            const q = (searchInput ? searchInput.value : '').trim();
+            closeOmnisearch();
+            filterPublicDirectory(q);
+            const target = document.getElementById('nearby-vendos');
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function renderOmnisearch(rawQuery) {
+            const q = (rawQuery || '').trim().toLowerCase();
+            if (!omnisearchDropdown) return;
+
+            if (q.length < 1) {
+                closeOmnisearch();
+                return;
+            }
+
+            const matchingProducts = [];
+            const matchingMachines = [];
+            const seenProducts = new Set();
+
+            VENDO_DATA.forEach(machine => {
+                const mName = machine.machine_name || '';
+                const mLoc = machine.location || '';
+                const mPlace = machine.indoor_placement || '';
+                const mDist = machine.distance || '';
+                const mCode = machine.identifier || '';
+
+                const machineBlob = (mName + ' ' + mLoc + ' ' + mPlace + ' ' + mCode).toLowerCase();
+                if (machineBlob.includes(q) && matchingMachines.length < 4) {
+                    matchingMachines.push({
+                        id: machine.machine_id,
+                        name: mName,
+                        location: mLoc,
+                        distance: mDist,
+                        inStock: machine.in_stock_count,
+                        total: machine.total_products
+                    });
+                }
+
+                if (machine.products && Array.isArray(machine.products)) {
+                    machine.products.forEach(p => {
+                        const pName = p.name || '';
+                        const pCat = p.category || '';
+                        const pBlob = (pName + ' ' + pCat).toLowerCase();
+                        if (pBlob.includes(q)) {
+                            const key = `${pName}-${machine.machine_id}`;
+                            if (!seenProducts.has(key) && matchingProducts.length < 5) {
+                                seenProducts.add(key);
+                                matchingProducts.push({
+                                    id: p.id,
+                                    name: pName,
+                                    category: pCat,
+                                    price: p.sell_price,
+                                    imageUrl: p.image_url || 'assets/images/vendos/vendo-candies.jpg',
+                                    quantity: p.quantity,
+                                    stockStatus: p.stock_status,
+                                    machineId: machine.machine_id,
+                                    machineName: mName
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (matchingProducts.length === 0 && matchingMachines.length === 0) {
+                omnisearchDropdown.innerHTML = `
+                    <div class="omnisearch-empty">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 8px; display:block; opacity:0.5;">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        No snacks or vendos found matching "<strong>${escapeHtml(rawQuery)}</strong>"
+                    </div>
+                `;
+                omnisearchDropdown.classList.add('active');
+                selectedDropdownIndex = -1;
+                return;
+            }
+
+            let html = '';
+
+            if (matchingProducts.length > 0) {
+                html += `<div class="omnisearch-section-title">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    Snacks &amp; Cold Drinks
+                </div>`;
+                matchingProducts.forEach(p => {
+                    const priceFormatted = Number(p.price || 0).toFixed(2);
+                    const stockTag = p.quantity > 0 ? `In stock (${p.quantity})` : 'Out of stock';
+                    html += `
+                        <div class="omnisearch-item" data-action="product" data-machine-id="${escapeHtml(p.machineId)}">
+                            <img class="omnisearch-item-thumb" src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" onerror="this.src='assets/images/vendos/vendo-candies.jpg'">
+                            <div class="omnisearch-item-info">
+                                <div class="omnisearch-item-name">${escapeHtml(p.name)}</div>
+                                <div class="omnisearch-item-sub">At ${escapeHtml(p.machineName)} &bull; ${escapeHtml(stockTag)}</div>
+                            </div>
+                            <div class="omnisearch-item-badge">$${priceFormatted}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (matchingMachines.length > 0) {
+                html += `<div class="omnisearch-section-title">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                    Vending Machines &amp; Locations
+                </div>`;
+                matchingMachines.forEach(m => {
+                    html += `
+                        <div class="omnisearch-item" data-action="machine" data-machine-id="${escapeHtml(m.id)}">
+                            <div class="omnisearch-item-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--platinum);border-radius:10px;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            </div>
+                            <div class="omnisearch-item-info">
+                                <div class="omnisearch-item-name">${escapeHtml(m.name)}</div>
+                                <div class="omnisearch-item-sub">${escapeHtml(m.location)} &bull; ${escapeHtml(m.distance)}</div>
+                            </div>
+                            <div class="omnisearch-item-badge" style="font-size:0.75rem;color:var(--mute);">${Number(m.inStock)} in stock</div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                <div class="omnisearch-footer-action" id="omnisearch-see-all">
+                    <span>View all matching vendos in directory &rarr;</span>
+                    <kbd style="font-size:0.7rem;background:var(--platinum);padding:2px 6px;border-radius:4px;border:1px solid var(--line);">Press Enter</kbd>
+                </div>
+            `;
+
+            omnisearchDropdown.innerHTML = html;
+            omnisearchDropdown.classList.add('active');
+            selectedDropdownIndex = -1;
+
+            omnisearchDropdown.querySelectorAll('.omnisearch-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const action = item.getAttribute('data-action');
+                    const mid = item.getAttribute('data-machine-id');
+                    closeOmnisearch();
+                    if (action === 'product') {
+                        openVendoStockModal(mid);
+                    } else if (action === 'machine') {
+                        scrollToMachineCard(mid);
+                    }
+                });
+            });
+
+            const seeAllBtn = document.getElementById('omnisearch-see-all');
+            if (seeAllBtn) {
+                seeAllBtn.addEventListener('click', () => {
+                    submitPublicSearch();
+                });
+            }
+        }
 
         function filterPublicDirectory(rawQuery) {
             const q = (rawQuery || '').trim().toLowerCase();
@@ -1946,14 +2258,64 @@ $placeholderVendoImages = [
 
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
-                filterPublicDirectory(e.target.value);
+                const val = e.target.value;
+                filterPublicDirectory(val);
+                renderOmnisearch(val);
+            });
+
+            searchInput.addEventListener('focus', (e) => {
+                if (e.target.value.trim().length > 0) {
+                    renderOmnisearch(e.target.value);
+                }
+            });
+
+            searchInput.addEventListener('keydown', (e) => {
+                if (!omnisearchDropdown || !omnisearchDropdown.classList.contains('active')) {
+                    return;
+                }
+                const items = omnisearchDropdown.querySelectorAll('.omnisearch-item');
+                if (items.length === 0) return;
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedDropdownIndex = (selectedDropdownIndex + 1) % items.length;
+                    items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedDropdownIndex));
+                    items[selectedDropdownIndex].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedDropdownIndex = (selectedDropdownIndex - 1 + items.length) % items.length;
+                    items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedDropdownIndex));
+                    items[selectedDropdownIndex].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    if (selectedDropdownIndex >= 0 && items[selectedDropdownIndex]) {
+                        e.preventDefault();
+                        items[selectedDropdownIndex].click();
+                    }
+                } else if (e.key === 'Escape') {
+                    closeOmnisearch();
+                }
             });
         }
+
+        if (searchForm) {
+            searchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitPublicSearch();
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            const searchBox = document.querySelector('.hero-search-box');
+            if (searchBox && !searchBox.contains(e.target)) {
+                closeOmnisearch();
+            }
+        });
 
         function applyQuickSearch(term) {
             if (searchInput) {
                 searchInput.value = term;
             }
+            closeOmnisearch();
             document.querySelectorAll('.filter-chip').forEach(chip => {
                 chip.classList.toggle('active', chip.textContent.trim().toLowerCase() === (term === '' ? 'all vendos' : term.toLowerCase()));
             });
@@ -1973,6 +2335,7 @@ $placeholderVendoImages = [
             if (searchInput) {
                 searchInput.value = catKeyword;
             }
+            closeOmnisearch();
             filterPublicDirectory(catKeyword);
             const target = document.getElementById('nearby-vendos');
             if (target) {
@@ -1981,6 +2344,7 @@ $placeholderVendoImages = [
         }
 
         function clearPublicSearch() {
+            closeOmnisearch();
             applyQuickSearch('');
         }
 

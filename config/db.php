@@ -446,6 +446,8 @@ function initialize_schema(PDO $pdo): void {
         CREATE TABLE IF NOT EXISTS inventory_logs (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
+            staff_id INT NULL,
+            actor_name VARCHAR(255) NULL,
             product_id INT NOT NULL,
             machine_id INT NOT NULL,
             previous_qty INT NOT NULL,
@@ -455,6 +457,7 @@ function initialize_schema(PDO $pdo): void {
             notes TEXT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_logs_user (user_id),
+            INDEX idx_logs_staff (staff_id),
             INDEX idx_logs_product (product_id),
             INDEX idx_logs_machine (machine_id),
             CONSTRAINT fk_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -462,6 +465,14 @@ function initialize_schema(PDO $pdo): void {
             CONSTRAINT fk_logs_machine FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ");
+
+    // Migration patch for existing setups
+    try {
+        $pdo->exec("ALTER TABLE inventory_logs ADD COLUMN staff_id INT NULL AFTER user_id");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE inventory_logs ADD COLUMN actor_name VARCHAR(255) NULL AFTER staff_id");
+    } catch (Throwable $e) {}
 
     // 8. Password Resets Table
     $pdo->exec("

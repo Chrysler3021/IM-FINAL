@@ -1,12 +1,16 @@
 @echo off
+set PORT=8080
+if not "%~1"=="" set PORT=%~1
+
 cd /d "%~dp0"
 echo ========================================================
 echo   Starting VendFlow Website Server (MySQL + PHP)
+echo   Listening on http://localhost:%PORT%
 echo ========================================================
 
-:: 1. Free port 8000 if an old PHP server instance was left hanging
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr /r ":8000.*LISTENING"') do (
-    echo Port 8000 was in use by PID %%a. Closing it...
+:: 1. Free port if an old PHP server instance was left hanging
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr /r ":%PORT%.*LISTENING"') do (
+    echo Port %PORT% was in use by PID %%a. Closing it...
     taskkill /F /PID %%a >nul 2>&1
 )
 
@@ -22,14 +26,14 @@ if "%ERRORLEVEL%"=="1" (
     )
 )
 
-echo Opening browser at http://localhost:8000 ...
-start http://localhost:8000
-echo Server is running at http://localhost:8000
+echo Opening browser at http://localhost:%PORT% ...
+start http://localhost:%PORT%
+echo Server is running at http://localhost:%PORT%
 echo Press Ctrl+C in this window to stop the PHP server.
 echo.
 if exist "C:\xampp\php\php.exe" (
-    "C:\xampp\php\php.exe" -S localhost:8000
+    "C:\xampp\php\php.exe" -S localhost:%PORT%
 ) else (
-    php -S localhost:8000
+    php -S localhost:%PORT%
 )
 pause
